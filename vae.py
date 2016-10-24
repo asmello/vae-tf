@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 from layers import Dense
-import plot
+# import plot
 from utils import composeAll, print_
 
 
@@ -102,9 +102,9 @@ class VAE():
         z = self.sampleGaussian(z_mean, z_log_sigma)
 
         # decoding / "generative": p(x|z)
-        decoding = [Dense("decoding", hidden_size, dropout, self.nonlinearity)
-                    for hidden_size in self.architecture[1:-1]]
-                    # assumes symmetry
+        decoding = [ Dense("decoding", hidden_size, dropout, self.nonlinearity)
+                     for hidden_size in self.architecture[1:-1] ]
+                     # assumes symmetry
         # final reconstruction: restore original dims, squash outputs [0, 1]
         decoding.insert(0, Dense( # prepend as outermost function
             "x_decoding", self.architecture[0], dropout, self.squashing))
@@ -136,8 +136,9 @@ class VAE():
             optimizer = tf.train.AdamOptimizer(self.learning_rate)
             tvars = tf.trainable_variables()
             grads_and_vars = optimizer.compute_gradients(cost, tvars)
-            clipped = [(tf.clip_by_value(grad, -5, 5), tvar) # gradient clipping
-                    for grad, tvar in grads_and_vars]
+            # gradient clipping
+            clipped = [ (tf.clip_by_value(grad, -5, 5), tvar)
+                        for grad, tvar in grads_and_vars ]
             train_op = optimizer.apply_gradients(clipped,
                                                  global_step=global_step,
                                                  name="minimize_cost")
@@ -223,9 +224,9 @@ class VAE():
         # np.array -> np.array
         return self.decode(self.sampleGaussian(*self.encode(x)))
 
-    def train(self, X, max_iter=np.inf, max_epochs=np.inf, cross_validate=True,
-              verbose=True, save=True, outdir="./out", plots_outdir="./png",
-              plot_latent_over_time=False):
+    def train(self, data, max_iter=np.inf, max_epochs=np.inf,
+              cross_validate=True, verbose=True, save=True, outdir="./out",
+              plots_outdir="./png", plot_latent_over_time=False):
         if save:
             saver = tf.train.Saver(tf.all_variables())
 
@@ -240,7 +241,7 @@ class VAE():
                 pow_ = 0
 
             while True:
-                x, _ = X.train.next_batch(self.batch_size)
+                x, _ = data.next_batch(self.batch_size)
                 feed_dict = {self.x_in: x, self.dropout_: self.dropout}
                 fetches = [ self.x_reconstructed, self.cost,
                             self.global_step, self.train_op ]
@@ -248,45 +249,45 @@ class VAE():
 
                 err_train += cost
 
-                if plot_latent_over_time:
-                    while int(round(BASE**pow_)) == i:
-                        plot.exploreLatent(self, nx=30, ny=30, ppf=True,
-                                           outdir=plots_outdir,
-                                           name="explore_ppf30_{}".format(pow_))
-
-                        names = ("train", "validation", "test")
-                        datasets = (X.train, X.validation, X.test)
-                        for name, dataset in zip(names, datasets):
-                            plot.plotInLatent(self, dataset.images,
-                                              dataset.labels, range_=(-6, 6),
-                                              title=name, outdir=plots_outdir,
-                                              name="{}_{}".format(name, pow_))
-
-                        print("{}^{} = {}".format(BASE, pow_, i))
-                        pow_ += INCREMENT
+                # if plot_latent_over_time:
+                #     while int(round(BASE**pow_)) == i:
+                #         plot.exploreLatent(self, nx=30, ny=30, ppf=True,
+                #                            outdir=plots_outdir,
+                #                            name="explore_ppf30_{}".format(pow_))
+                #
+                #         names = ("train", "validation", "test")
+                #         datasets = (X.train, X.validation, X.test)
+                #         for name, dataset in zip(names, datasets):
+                #             plot.plotInLatent(self, dataset.images,
+                #                               dataset.labels, range_=(-6, 6),
+                #                               title=name, outdir=plots_outdir,
+                #                               name="{}_{}".format(name, pow_))
+                #
+                #         print("{}^{} = {}".format(BASE, pow_, i))
+                #         pow_ += INCREMENT
 
                 if i%1000 == 0 and verbose:
                     print("round {} --> avg cost: ".format(i), err_train / i)
 
-                if i%2000 == 0 and verbose:# and i >= 10000:
+                # if i%2000 == 0 and verbose:# and i >= 10000:
                     # visualize `n` examples of current minibatch inputs +
                     # reconstructions
-                    plot.plotSubset(self, x, x_reconstructed, n=10,
-                                    name="train", outdir=plots_outdir)
+                    # plot.plotSubset(self, x, x_reconstructed, n=10,
+                    #                 name="train", outdir=plots_outdir)
 
-                    if cross_validate:
-                        x, _ = X.validation.next_batch(self.batch_size)
-                        feed_dict = {self.x_in: x}
-                        fetches = [self.x_reconstructed, self.cost]
-                        x_reconstructed, cost = self.sesh.run(fetches,feed_dict)
+                    # if cross_validate:
+                    #     x, _ = X.validation.next_batch(self.batch_size)
+                    #     feed_dict = {self.x_in: x}
+                    #     fetches = [self.x_reconstructed, self.cost]
+                    #     x_reconstructed, cost = self.sesh.run(fetches,feed_dict)
+                    #
+                    #     print("round {} --> CV cost: ".format(i), cost)
+                    #     plot.plotSubset(self, x, x_reconstructed, n=10,
+                    #                     name="cv", outdir=plots_outdir)
 
-                        print("round {} --> CV cost: ".format(i), cost)
-                        plot.plotSubset(self, x, x_reconstructed, n=10,
-                                        name="cv", outdir=plots_outdir)
-
-                if i >= max_iter or X.train.epochs_completed >= max_epochs:
+                if i >= max_iter or data.epochs_completed >= max_epochs:
                     print("final avg cost (@ step {} = epoch {}): {}".format(
-                        i, X.train.epochs_completed, err_train / i))
+                        i, data.epochs_completed, err_train / i))
                     now = datetime.now().isoformat()[11:]
                     print("------- Training end: {} -------\n".format(now))
 
@@ -304,7 +305,7 @@ class VAE():
 
         except(KeyboardInterrupt):
             print("final avg cost (@ step {} = epoch {}): {}".format(
-                i, X.train.epochs_completed, err_train / i))
+                i, data.epochs_completed, err_train / i))
             now = datetime.now().isoformat()[11:]
             print("------- Training end: {} -------\n".format(now))
             sys.exit(0)
