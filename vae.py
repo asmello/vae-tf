@@ -148,7 +148,7 @@ class VAE:
         with tf.name_scope("latent_in"):
             z_ = tf.placeholder_with_default(
                 tf.random_normal((1, self.architecture[-1])),
-                shape=[None, self.architecture[-1]], name="latent_in")
+                shape=(None, self.architecture[-1]), name="latent_in")
         x_reconstructed_ = composeAll(decoding)(z_)
 
         return (x_in, dropout, z_mean, z_log_sigma, x_reconstructed,
@@ -231,14 +231,15 @@ class VAE:
 
         try:
             err_train = 0
+            last_printed_i = 0
             last_printed_err = 0
             now = datetime.now().isoformat()[11:]
             print("------- Training begin: {} -------\n".format(now))
 
-            if plot_latent_over_time: # plot latent space over log_BASE time
-                BASE = 2
-                INCREMENT = 0.5
-                pow_ = 0
+            # if plot_latent_over_time: # plot latent space over log_BASE time
+            #     BASE = 2
+            #     INCREMENT = 0.5
+            #     pow_ = 0
 
             while True:
                 x, _ = data.next_batch(self.batch_size)
@@ -267,9 +268,10 @@ class VAE:
                 #         pow_ += INCREMENT
 
                 if i%1000 == 0 and verbose:
-                    avg = (err_train - last_printed_err) / 1000
+                    avg = (err_train - last_printed_err) / (i - last_printed_i)
                     print("round {} --> avg cost: {}".format(i, avg))
                     last_printed_err = err_train
+                    last_printed_i = i
 
                 # if i%2000 == 0 and verbose:# and i >= 10000:
                     # visualize `n` examples of current minibatch inputs +
@@ -288,8 +290,9 @@ class VAE:
                     #                     name="cv", outdir=plots_outdir)
 
                 if i >= max_iter or data.epochs_completed >= max_epochs:
+                    avg = (err_train - last_printed_err) / (i - last_printed_i)
                     print("final avg cost (@ step {} = epoch {}): {}".format(
-                        i, data.epochs_completed, err_train / i))
+                        i, data.epochs_completed, avg))
                     now = datetime.now().isoformat()[11:]
                     print("------- Training end: {} -------\n".format(now))
 
@@ -306,8 +309,9 @@ class VAE:
                     break
 
         except(KeyboardInterrupt):
+            avg = (err_train - last_printed_err) / (i - last_printed_i)
             print("final avg cost (@ step {} = epoch {}): {}".format(
-                i, data.epochs_completed, err_train / i))
+                i, data.epochs_completed, avg))
             now = datetime.now().isoformat()[11:]
             print("------- Training end: {} -------\n".format(now))
             sys.exit(0)
