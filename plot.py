@@ -38,14 +38,16 @@ def plotSubset(model, x_in, x_reconstructed, n=10, cols=None, outlines=True,
     # plt.show()
     if save:
         title = "{}_batch_{}_round_{}_{}.png".format(
-            model.datetime, "_".join(map(str, model.architecture)), model.step, name)
+            model.datetime, "_".join(map(str, model.architecture)),
+                                     model.step, name)
         plt.savefig(os.path.join(outdir, title), bbox_inches="tight")
 
 
 def plotInLatent(model, x_in, labels=[], range_=None, title=None,
                  save=True, name="data", outdir="."):
     """Util to plot points in 2-D latent space"""
-    assert model.architecture[-1] == 2, "2-D plotting only works for latent space in R2!"
+    assert model.architecture[-1] == 2, \
+           "2-D plotting only works for latent space in R2!"
     title = (title if title else name)
     mus, _ = model.encode(x_in)
     ys, xs = mus.T
@@ -85,7 +87,8 @@ def plotInLatent(model, x_in, labels=[], range_=None, title=None,
 def exploreLatent(model, nx=20, ny=20, range_=(-4, 4), ppf=False,
                   save=True, name="explore", outdir="."):
     """Util to explore low-dimensional manifold of latent space"""
-    assert model.architecture[-1] == 2, "2-D plotting only works for latent space in R2!"
+    assert model.architecture[-1] == 2, \
+           "2-D plotting only works for latent space in R2!"
     # linear range; else ppf (percent point function) == inverse CDF from [0, 1]
     range_ = ((0, 1) if ppf else range_)
     min_, max_ = range_
@@ -119,13 +122,16 @@ def exploreLatent(model, nx=20, ny=20, range_=(-4, 4), ppf=False,
     # plt.show()
     if save:
         title = "{}_latent_{}_round_{}_{}.png".format(
-            model.datetime, "_".join(map(str, model.architecture)), model.step, name)
+            model.datetime, "_".join(map(str, model.architecture)),
+                                     model.step, name)
         plt.savefig(os.path.join(outdir, title), bbox_inches="tight")
 
 
-def interpolate(model, latent_1, latent_2, n=20, save=True, name="interpolate", outdir="."):
+def interpolate(model, latent_1, latent_2, n=20, save=True,
+                name="interpolate", outdir="."):
     """Util to interpolate between two points in n-dimensional latent space"""
-    zs = np.array([np.linspace(start, end, n) # interpolate across every z dimension
+    # interpolate across every z dimension
+    zs = np.array([np.linspace(start, end, n)
                     for start, end in zip(latent_1, latent_2)]).T
     xs_reconstructed = model.decode(zs)
 
@@ -140,7 +146,8 @@ def interpolate(model, latent_1, latent_2, n=20, save=True, name="interpolate", 
     # plt.show()
     if save:
         title = "{}_latent_{}_round_{}_{}".format(
-            model.datetime, "_".join(map(str, model.architecture)), model.step, name)
+            model.datetime, "_".join(map(str, model.architecture)),
+                                     model.step, name)
         plt.savefig(os.path.join(outdir, title), bbox_inches="tight")
 
 
@@ -161,7 +168,8 @@ def justMNIST(x, save=True, name="digit", outdir="."):
         plt.savefig(os.path.join(outdir, title), bbox_inches="tight")
 
 
-def morph(model, zs, n_per_morph=10, loop=True, save=True, name="morph", outdir="."):
+def morph(model, zs, n_per_morph=10, loop=True, save=True,
+          name="morph", outdir="."):
     """Plot frames of morph between zs (np.array of 2+ latent points)"""
     assert len(zs) > 1, "Must specify at least two latent pts for morph!"
     dim = int(model.architecture[0]**0.5) # assume square images
