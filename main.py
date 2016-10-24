@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import sys
 import argparse
@@ -7,36 +9,40 @@ import tensorflow as tf
 
 # import plot
 from data import Data
-import vae
-
-ARCHITECTURE = [ None, # input length, leave it like this
-                 500, 500, # intermediate encoding
-                 2 ] # latent space dims
-                # 50]
-# (and symmetrically back out again)
+from vae import VAE
 
 LOG_DIR = "./log"
 METAGRAPH_DIR = "./out"
 PLOTS_DIR = "./png"
 
-def main(hp, max_iter, max_epochs, filename=None, to_reload=None):
+def load(args):
+    v = VAE(meta_graph=args.graph_file)
+    print("Loaded!")
+    return v
 
-    if to_reload: # restore
-        v = vae.VAE(ARCHITECTURE, hp, meta_graph=to_reload)
-        print("Loaded!")
+def train(args):
+    hp = {
+        "batch_size": args.batch_size,
+        "learning_rate": args.learning_rate,
+        "dropout": args.dropout_prob,
+        "lambda_l2_reg": args.lambda_,
+        "nonlinearity": tf.nn.elu,
+        "squashing": tf.nn.sigmoid
+    }
 
-    else: # train
-        data = Data(filename)
-        ARCHITECTURE[0] = data.sample_size
-        v = vae.VAE(ARCHITECTURE, hp, log_dir=LOG_DIR)
-        v.train(data, max_iter=max_iter, max_epochs=max_epochs,
-                cross_validate=False, verbose=True, save=True,
-                outdir=METAGRAPH_DIR, plots_outdir=PLOTS_DIR,
-                plot_latent_over_time=False)
-        print("Trained!")
+    data = Data(args.data_file)
 
-    # all_plots(v, mnist)
+    arch = [ data.sample_size ] + \
+           [ args.layers_width ] * args.num_layers + \
+           [ args.latent_dim ]
+    # (and symmetrically back out again)
 
+    v = VAE(arch, hp, log_dir=LOG_DIR)
+    v.train(data, max_iter=args.num_iters, max_epochs=args.num_epochs,
+            cross_validate=False, verbose=True, save=True,
+            outdir=METAGRAPH_DIR, plots_outdir=PLOTS_DIR,
+            plot_latent_over_time=False)
+    print("Trained!")
     return v
 
 if __name__ == "__main__":
@@ -49,34 +55,37 @@ if __name__ == "__main__":
             pass
 
     parser = argparse.ArgumentParser(description='Variational Autoencoder.')
-    parser.add_argument('--num_epochs', type=int, default=np.inf,
-                        help='Maximum number of epochs.')
-    parser.add_argument('-n', '--num_iters', type=int, default=2000,
-                        help='Maximum number of iterations.')
-    parser.add_argument('-b', '--batch_size', type=int, default=128,
-                        help='Batch size to use for training.')
-    parser.add_argument('-r', '--learning_rate', type=float, default=5e-4,
-                        help='Learning rate for optimizer.')
-    parser.add_argument('-p', '--dropout_prob', type=float, default=0.9,
-                        help='Keep probability for dropout in training.')
-    parser.add_argument('--lambda', type=float, default=1e-5, dest='lambda_',
-                        help='Lambda in L2 regularization.')
-    parser.add_argument('-i', '--input', help='Use pre-trained graph in file.')
-    parser.add_argument('-t', '--train', dest='datafile',
-                        help='Use pickled datafile for training.')
+    subparsers = parser.add_subparsers(title='Commands', dest='command')
+    subparsers.required = True
+
+    train_parser = subparsers.add_parser('train',
+                                         help='Train the VAE with data.')
+    train_parser.add_argument('--num_epochs', type=int, default=np.inf,
+                              help='Maximum number of epochs.')
+    train_parser.add_argument('-n', '--num_iters', type=int, default=2000,
+                              help='Maximum number of iterations.')
+    train_parser.add_argument('-b', '--batch_size', type=int, default=128,
+                              help='Batch size to use for training.')
+    train_parser.add_argument('-r', '--learning_rate', type=float, default=5e-4,
+                              help='Learning rate for optimizer.')
+    train_parser.add_argument('-p', '--dropout_prob', type=float, default=0.9,
+                              help='Keep probability for dropout in training.')
+    train_parser.add_argument('--lambda', type=float, default=1e-5,
+                              dest='lambda_', metavar='LAMBDA',
+                              help='Lambda in L2 regularization.')
+    train_parser.add_argument('-l', '--num_layers', type=int, default=2,
+                              help='Number of hidden layers in each network.')
+    train_parser.add_argument('-w', '--layers_width', type=int, default=500,
+                              help='Layer width (constant).')
+    train_parser.add_argument('-L', '--latent_dim', type=int, default=2,
+                              help='Number of latent variable dimensions.')
+    train_parser.add_argument('data_file',
+                              help='Pickled data for training.')
+    train_parser.set_defaults(func=train)
+
+    load_parser = subparsers.add_parser('load', help='Load a pre-trained VAE.')
+    load_parser.add_argument('graph_file', help='Stored computational graph.')
+    load_parser.set_defaults(func=load)
+
     args = parser.parse_args()
-
-    hp = {
-        "batch_size": args.batch_size,
-        "learning_rate": args.learning_rate,
-        "dropout": args.dropout_prob,
-        "lambda_l2_reg": args.lambda_,
-        "nonlinearity": tf.nn.elu,
-        "squashing": tf.nn.sigmoid
-    }
-
-    if args.datafile or args.input:
-        model = main(hp, args.num_iters, args.num_epochs,
-                     to_reload=args.input, filename=args.datafile)
-    else:
-        print('No action specified. See --help.')
+    model = args.func(args)
