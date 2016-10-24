@@ -11,7 +11,7 @@ from layers import Dense
 from utils import composeAll, print_
 
 
-class VAE():
+class VAE:
     """Variational Autoencoder
 
     see: Kingma & Welling - Auto-Encoding Variational Bayes
@@ -212,9 +212,8 @@ class VAE():
         # (np.array | tf.Variable) -> np.array
         feed_dict = dict()
         if zs is not None:
-            is_tensor = lambda x: hasattr(x, "eval")
-            # coerce to np.array
-            zs = (self.sesh.run(zs) if is_tensor(zs) else zs)
+            # coerce to np.array, if zs is tensor
+            zs = self.sesh.run(zs) if hasattr(zs, "eval") else zs
             feed_dict.update({self.z_: zs})
         # else, zs defaults to draw from conjugate prior z ~ N(0, I)
         return self.sesh.run(self.x_reconstructed_, feed_dict=feed_dict)
@@ -232,6 +231,7 @@ class VAE():
 
         try:
             err_train = 0
+            last_printed_err = 0
             now = datetime.now().isoformat()[11:]
             print("------- Training begin: {} -------\n".format(now))
 
@@ -267,7 +267,9 @@ class VAE():
                 #         pow_ += INCREMENT
 
                 if i%1000 == 0 and verbose:
-                    print("round {} --> avg cost: ".format(i), err_train / i)
+                    avg = (err_train - last_printed_err) / 1000
+                    print("round {} --> avg cost: {}".format(i, avg))
+                    last_printed_err = err_train
 
                 # if i%2000 == 0 and verbose:# and i >= 10000:
                     # visualize `n` examples of current minibatch inputs +
