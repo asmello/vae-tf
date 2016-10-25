@@ -67,8 +67,7 @@ class VAE:
 
         # unpack handles for tensor ops to feed or fetch
         (self.x_in, self.dropout_, self.z_mean, self.z_log_sigma,
-         self.x_reconstructed, self.z_in, self.x_generated,
-         self.cost, self.global_step, self.train_op) = handles
+         self.x_out, self.cost, self.global_step, self.train_op) = handles
 
         if save_graph_def: # tensorboard
             self.logger = tf.train.SummaryWriter(log_dir, self.sesh.graph)
@@ -98,7 +97,8 @@ class VAE:
 
         # kingma & welling: only 1 draw necessary as long as
         # minibatch large enough (>100)
-        z = self.sampleGaussian(z_mean, z_log_sigma)
+        self.z = tf.identity(self.sampleGaussian(z_mean, z_log_sigma), name="z")
+        # this is also the entry point for latent space exploration
 
         # decoding / "generative": p(x|z)
         decoding = [ Dense("decoding", hidden_size, dropout, self.nonlinearity)
@@ -107,10 +107,10 @@ class VAE:
         # final reconstruction: restore original dims
         # prepend as outermost function
         decoding.insert(0, Dense("x_decoding", self.architecture[0], dropout))
-        outer_layer = composeAll(decoding)(z)
-        x_reconstructed = tf.nn.sigmoid(outer_layer, name="x_reconstructed")
+        outer_layer = composeAll(decoding)(self.z)
+        x_out = tf.nn.sigmoid(outer_layer, name="x_out")
 
-        # reconstruction loss: mismatch b/w x & x_reconstructed
+        # reconstruction loss: mismatch b/w x & x_out
         # binary cross-entropy -- assumes x & p(x|z) are iid Bernoullis
         rec_loss = VAE.crossEntropy(outer_layer, x_in)
 
@@ -142,16 +142,8 @@ class VAE:
                                                  global_step=global_step,
                                                  name="minimize_cost")
 
-        # ops to directly explore latent space
-        # defaults to prior z ~ N(0, I)
-        z_in = tf.placeholder_with_default(
-            tf.random_normal((1, self.architecture[-1])),
-            shape=(None, self.architecture[-1]), name="z_in")
-        x_generated = tf.nn.sigmoid(composeAll(decoding)(z_in),
-                                    name="x_generated")
-
-        return (x_in, dropout, z_mean, z_log_sigma, x_reconstructed,
-                z_in, x_generated, cost, global_step, train_op)
+        return (x_in, dropout, z_mean, z_log_sigma, x_out,
+                cost, global_step, train_op)
 
     def sampleGaussian(self, mu, log_sigma):
         """(Differentiably!) draw sample from Gaussian with given shape,
@@ -208,13 +200,11 @@ class VAE:
         space; a.k.a. generative network p(x|z)
         """
         # (np.array | tf.Variable) -> np.array
-        feed_dict = dict()
-        if zs is not None:
-            # coerce to np.array, if zs is tensor
-            zs = self.sesh.run(zs) if hasattr(zs, "eval") else zs
-            feed_dict.update({self.z_in: zs})
-        # else, zs defaults to draw from conjugate prior z ~ N(0, I)
-        return self.sesh.run(self.x_generated, feed_dict=feed_dict)
+        # coerce to np.array, if zs is tensor
+        zs = self.sesh.run(zs) if hasattr(zs, "eval") else zs \
+             or np.random.normal(size=(1, self.architecture[-1]))
+             # if zs None, defaults to draw from conjugate prior z ~ N(0, I)
+        return self.sesh.run(self.x_out, feed_dict={self.z: zs})
 
     def vae(self, x):
         """End-to-end autoencoder"""
@@ -242,9 +232,9 @@ class VAE:
             while True:
                 x, _ = data.next_batch(self.batch_size)
                 feed_dict = {self.x_in: x, self.dropout_: self.dropout}
-                fetches = [ self.x_reconstructed, self.cost,
+                fetches = [ self.x_out, self.cost,
                             self.global_step, self.train_op ]
-                x_reconstructed, cost, i, _ = self.sesh.run(fetches, feed_dict)
+                x_out, cost, i, _ = self.sesh.run(fetches, feed_dict)
 
                 err_train += cost
 
@@ -268,17 +258,17 @@ class VAE:
                 # if i%2000 == 0 and verbose:# and i >= 10000:
                     # visualize `n` examples of current minibatch inputs +
                     # reconstructions
-                    # plot.plotSubset(self, x, x_reconstructed, n=10,
+                    # plot.plotSubset(self, x, x_out, n=10,
                     #                 name="train", outdir=plots_outdir)
 
                     # if cross_validate:
                     #     x, _ = X.validation.next_batch(self.batch_size)
                     #     feed_dict = {self.x_in: x}
-                    #     fetches = [self.x_reconstructed, self.cost]
-                    #     x_reconstructed, cost = self.sesh.run(fetches,feed_dict)
+                    #     fetches = [self.x_out, self.cost]
+                    #     x_out, cost = self.sesh.run(fetches,feed_dict)
                     #
                     #     print("round {} --> CV cost: ".format(i), cost)
-                    #     plot.plotSubset(self, x, x_reconstructed, n=10,
+                    #     plot.plotSubset(self, x, x_out, n=10,
                     #                     name="cv", outdir=plots_outdir)
 
                 if i >= max_steps or data.epochs_completed >= max_epochs:
