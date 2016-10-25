@@ -83,7 +83,8 @@ class VAE:
         dropout = tf.placeholder_with_default(1., shape=(), name="dropout")
 
         # encoding / "recognition": q(z|x)
-        encoding = [ Dense("encoding", hidden_size, dropout, self.nonlinearity)
+        encoding = [ Dense("encoding", hidden_size, dropout, self.nonlinearity,
+                           initialization=self.initialization)
                      # hidden layers reversed for function composition:
                      # outer -> inner
                      for hidden_size in reversed(self.architecture[1:-1]) ]
@@ -91,9 +92,10 @@ class VAE:
 
         # latent distribution parameterized by hidden encoding
         # z ~ N(z_mean, np.exp(z_log_sigma)**2)
-        z_mean = Dense("z_mean", self.architecture[-1], dropout)(h_encoded)
-        z_log_sigma = Dense("z_log_sigma",
-                            self.architecture[-1], dropout)(h_encoded)
+        z_mean = Dense("z_mean", self.architecture[-1], dropout,
+                       initialization=self.initialization)(h_encoded)
+        z_log_sigma = Dense("z_log_sigma", self.architecture[-1], dropout,
+                            initialization=self.initialization)(h_encoded)
 
         # kingma & welling: only 1 draw necessary as long as
         # minibatch large enough (>100)
@@ -101,12 +103,14 @@ class VAE:
         # this is also the entry point for latent space exploration
 
         # decoding / "generative": p(x|z)
-        decoding = [ Dense("decoding", hidden_size, dropout, self.nonlinearity)
+        decoding = [ Dense("decoding", hidden_size, dropout, self.nonlinearity,
+                            initialization=self.initialization)
                      for hidden_size in self.architecture[1:-1] ]
                      # assumes symmetry
         # final reconstruction: restore original dims
         # prepend as outermost function
-        decoding.insert(0, Dense("x_decoding", self.architecture[0], dropout))
+        decoding.insert(0, Dense("x_decoding", self.architecture[0], dropout,
+                                 initialization=self.initialization))
         outer_layer = composeAll(decoding)(z)
         x_out = tf.nn.sigmoid(outer_layer, name="x_out")
 
@@ -131,7 +135,7 @@ class VAE:
         # optimization
         global_step = tf.Variable(0, trainable=False)
         train_op = tf.contrib.layers.optimize_loss(cost, global_step,
-            self.learning_rate, 'Adam', clip_gradients=self.grad_clipping,
+            self.learning_rate, "Adam", clip_gradients=self.grad_clipping,
             name="trainer")
 
         return (x_in, dropout, z_mean, z_log_sigma, x_out, z,
@@ -287,7 +291,8 @@ class VAE:
 
                 if i%1000 == 0 and verbose:
                     avg = (err_train - last_printed_err) / (i - last_printed_i)
-                    print("step {} --> avg cost: {}".format(i, avg))
+                    print("step {} (epoch {}) --> avg cost: {}"\
+                          .format(i, data.epochs_completed, avg))
                     last_printed_err = err_train
                     last_printed_i = i
 
