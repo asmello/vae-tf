@@ -81,7 +81,7 @@ if __name__ == "__main__":
                               help='Number of hidden layers in each network.')
     train_parser.add_argument('-w', '--layers_width', type=int, default=500,
                               help='Layer width (constant).')
-    train_parser.add_argument('-L', '--latent_dim', type=int, default=2,
+    train_parser.add_argument('-z', '--latent_dim', type=int, default=2,
                               help='Number of latent variable dimensions.')
     train_parser.add_argument('data_file',
                               help='Pickled data for training.')
