@@ -66,8 +66,8 @@ class VAE:
             handles = self.sesh.graph.get_collection(VAE.RESTORE_KEY)
 
         # unpack handles for tensor ops to feed or fetch
-        (self.x_in, self.dropout_, self.z_mean, self.z_log_sigma,
-         self.x_out, self.cost, self.global_step, self.train_op) = handles
+        (self.x_in, self.dropout_, self.z_mean, self.z_log_sigma, self.x_out,
+         self.z, self.cost, self.global_step, self.train_op) = handles
 
         if save_graph_def: # tensorboard
             self.logger = tf.train.SummaryWriter(log_dir, self.sesh.graph)
@@ -97,7 +97,7 @@ class VAE:
 
         # kingma & welling: only 1 draw necessary as long as
         # minibatch large enough (>100)
-        self.z = tf.identity(self.sampleGaussian(z_mean, z_log_sigma), name="z")
+        z = tf.identity(self.sampleGaussian(z_mean, z_log_sigma), name="z")
         # this is also the entry point for latent space exploration
 
         # decoding / "generative": p(x|z)
@@ -107,7 +107,7 @@ class VAE:
         # final reconstruction: restore original dims
         # prepend as outermost function
         decoding.insert(0, Dense("x_decoding", self.architecture[0], dropout))
-        outer_layer = composeAll(decoding)(self.z)
+        outer_layer = composeAll(decoding)(z)
         x_out = tf.nn.sigmoid(outer_layer, name="x_out")
 
         # reconstruction loss: mismatch b/w x & x_out
@@ -125,9 +125,8 @@ class VAE:
             l2_reg = self.lambda_l2_reg * tf.add_n(regularizers)
 
         with tf.name_scope("cost"):
-            # average over minibatch
-            cost = tf.reduce_mean(rec_loss + kl_loss, name="vae_cost")
-            cost += l2_reg
+            # average over minibatch plus l2 regularizer
+            cost = tf.reduce_mean(rec_loss + kl_loss, name="vae_cost") + l2_reg
 
         # optimization
         global_step = tf.Variable(0, trainable=False)
@@ -142,7 +141,7 @@ class VAE:
                                                  global_step=global_step,
                                                  name="minimize_cost")
 
-        return (x_in, dropout, z_mean, z_log_sigma, x_out,
+        return (x_in, dropout, z_mean, z_log_sigma, x_out, z,
                 cost, global_step, train_op)
 
     def sampleGaussian(self, mu, log_sigma):
@@ -200,10 +199,12 @@ class VAE:
         space; a.k.a. generative network p(x|z)
         """
         # (np.array | tf.Variable) -> np.array
-        # coerce to np.array, if zs is tensor
-        zs = self.sesh.run(zs) if hasattr(zs, "eval") else zs \
-             or np.random.normal(size=(1, self.architecture[-1]))
-             # if zs None, defaults to draw from conjugate prior z ~ N(0, I)
+        if zs is None:
+            # defaults to draw from conjugate prior z ~ N(0, I)
+            zs = np.random.normal(size=(1, self.architecture[-1]))
+        else:
+            # coerce to np.array, if zs is tensor
+            zs = self.sesh.run(zs) if hasattr(zs, "eval") else zs
         return self.sesh.run(self.x_out, feed_dict={self.z: zs})
 
     def vae(self, x):
