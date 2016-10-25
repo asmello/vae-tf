@@ -37,7 +37,7 @@ def train(args):
     # (and symmetrically back out again)
 
     v = VAE(arch, hp, log_dir=LOG_DIR)
-    v.train(data, max_iter=args.num_iters, max_epochs=args.num_epochs,
+    v.train(data, max_steps=args.num_steps, max_epochs=args.num_epochs,
             cross_validate=False, verbose=True, save=True,
             outdir=METAGRAPH_DIR, plots_outdir=PLOTS_DIR,
             plot_latent_over_time=False)
@@ -61,8 +61,8 @@ if __name__ == "__main__":
                                          help='Train the VAE with data.')
     train_parser.add_argument('--num_epochs', type=int, default=np.inf,
                               help='Maximum number of epochs.')
-    train_parser.add_argument('-n', '--num_iters', type=int, default=2000,
-                              help='Maximum number of iterations.')
+    train_parser.add_argument('-n', '--num_steps', type=int, default=2000,
+                              help='Maximum number of steps.')
     train_parser.add_argument('-b', '--batch_size', type=int, default=128,
                               help='Batch size to use for training.')
     train_parser.add_argument('-r', '--learning_rate', type=float, default=5e-4,

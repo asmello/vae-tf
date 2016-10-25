@@ -142,6 +142,14 @@ class VAE:
                                                  global_step=global_step,
                                                  name="minimize_cost")
 
+        # ops to directly explore latent space
+        # defaults to prior z ~ N(0, I)
+        z_in = tf.placeholder_with_default(
+            tf.random_normal((1, self.architecture[-1])),
+            shape=(None, self.architecture[-1]), name="z_in")
+        x_generated = tf.nn.sigmoid(composeAll(decoding)(z_in),
+                                    name="x_generated")
+
         return (x_in, dropout, z_mean, z_log_sigma, x_reconstructed,
                 z_in, x_generated, cost, global_step, train_op)
 
@@ -213,7 +221,7 @@ class VAE:
         # np.array -> np.array
         return self.decode(self.sampleGaussian(*self.encode(x)))
 
-    def train(self, data, max_iter=np.inf, max_epochs=np.inf,
+    def train(self, data, max_steps=np.inf, max_epochs=np.inf,
               cross_validate=True, verbose=True, save=True, outdir="./out",
               plots_outdir="./png", plot_latent_over_time=False):
         if save:
@@ -257,12 +265,6 @@ class VAE:
                 #         print("{}^{} = {}".format(BASE, pow_, i))
                 #         pow_ += INCREMENT
 
-                if i%1000 == 0 and verbose:
-                    avg = (err_train - last_printed_err) / (i - last_printed_i)
-                    print("round {} --> avg cost: {}".format(i, avg))
-                    last_printed_err = err_train
-                    last_printed_i = i
-
                 # if i%2000 == 0 and verbose:# and i >= 10000:
                     # visualize `n` examples of current minibatch inputs +
                     # reconstructions
@@ -279,10 +281,10 @@ class VAE:
                     #     plot.plotSubset(self, x, x_reconstructed, n=10,
                     #                     name="cv", outdir=plots_outdir)
 
-                if i >= max_iter or data.epochs_completed >= max_epochs:
+                if i >= max_steps or data.epochs_completed >= max_epochs:
                     avg = (err_train - last_printed_err) / (i - last_printed_i)
-                    print("final avg cost (@ step {} = epoch {}): {}".format(
-                        i, data.epochs_completed, avg))
+                    print("final avg cost (@ step {} = epoch {}): {}"\
+                          .format(i, data.epochs_completed, avg))
                     now = datetime.now().isoformat()[11:]
                     print("------- Training end: {} -------\n".format(now))
 
@@ -290,13 +292,20 @@ class VAE:
                         outfile = os.path.join(os.path.abspath(outdir),
                             "{}_vae_{}".format(self.datetime,
                             "_".join(map(str, self.architecture))))
-                        saver.save(self.sesh, outfile, global_step=self.step)
+                        saver.save(self.sesh, outfile,
+                                   global_step=self.global_step)
                     try:
                         self.logger.flush()
                         self.logger.close()
                     except(AttributeError): # not logging
                         continue
                     break
+
+                if i%1000 == 0 and verbose:
+                    avg = (err_train - last_printed_err) / (i - last_printed_i)
+                    print("step {} --> avg cost: {}".format(i, avg))
+                    last_printed_err = err_train
+                    last_printed_i = i
 
         except(KeyboardInterrupt):
             avg = (err_train - last_printed_err) / (i - last_printed_i)
