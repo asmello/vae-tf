@@ -26,8 +26,7 @@ def train(args):
         "learning_rate": args.learning_rate,
         "dropout": args.dropout_prob,
         "lambda_l2_reg": args.lambda_,
-        "nonlinearity": tf.nn.elu,
-        "squashing": tf.nn.sigmoid
+        "nonlinearity": tf.nn.elu
     }
 
     data = Data(args.data_file)

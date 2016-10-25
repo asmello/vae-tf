@@ -22,8 +22,7 @@ class VAE:
         "learning_rate": 1E-3,
         "dropout": 1.,
         "lambda_l2_reg": 0.,
-        "nonlinearity": tf.nn.elu,
-        "squashing": tf.nn.sigmoid
+        "nonlinearity": tf.nn.elu
     }
     RESTORE_KEY = "to_restore"
 
@@ -68,7 +67,7 @@ class VAE:
 
         # unpack handles for tensor ops to feed or fetch
         (self.x_in, self.dropout_, self.z_mean, self.z_log_sigma,
-         self.x_reconstructed, self.z_, self.x_reconstructed_,
+         self.x_reconstructed, self.z_in, self.x_generated,
          self.cost, self.global_step, self.train_op) = handles
 
         if save_graph_def: # tensorboard
@@ -81,7 +80,7 @@ class VAE:
 
     def _buildGraph(self):
         x_in = tf.placeholder(tf.float32, shape=(None, self.architecture[0]),
-                              name="x")
+                              name="x_in")
         dropout = tf.placeholder_with_default(1., shape=(), name="dropout")
 
         # encoding / "recognition": q(z|x)
@@ -105,15 +104,15 @@ class VAE:
         decoding = [ Dense("decoding", hidden_size, dropout, self.nonlinearity)
                      for hidden_size in self.architecture[1:-1] ]
                      # assumes symmetry
-        # final reconstruction: restore original dims, squash outputs [0, 1]
-        decoding.insert(0, Dense( # prepend as outermost function
-            "x_decoding", self.architecture[0], dropout, self.squashing))
-        x_reconstructed = tf.identity(composeAll(decoding)(z),
-                                      name="x_reconstructed")
-        
+        # final reconstruction: restore original dims
+        # prepend as outermost function
+        decoding.insert(0, Dense("x_decoding", self.architecture[0], dropout))
+        outer_layer = composeAll(decoding)(z)
+        x_reconstructed = tf.nn.sigmoid(outer_layer, name="x_reconstructed")
+
         # reconstruction loss: mismatch b/w x & x_reconstructed
         # binary cross-entropy -- assumes x & p(x|z) are iid Bernoullis
-        rec_loss = VAE.crossEntropy(x_reconstructed, x_in)
+        rec_loss = VAE.crossEntropy(outer_layer, x_in)
 
         # Kullback-Leibler divergence: mismatch b/w approximate
         # vs. imposed/true posterior
@@ -143,16 +142,8 @@ class VAE:
                                                  global_step=global_step,
                                                  name="minimize_cost")
 
-        # ops to directly explore latent space
-        # defaults to prior z ~ N(0, I)
-        with tf.name_scope("latent_in"):
-            z_ = tf.placeholder_with_default(
-                tf.random_normal((1, self.architecture[-1])),
-                shape=(None, self.architecture[-1]), name="latent_in")
-        x_reconstructed_ = composeAll(decoding)(z_)
-
         return (x_in, dropout, z_mean, z_log_sigma, x_reconstructed,
-                z_, x_reconstructed_, cost, global_step, train_op)
+                z_in, x_generated, cost, global_step, train_op)
 
     def sampleGaussian(self, mu, log_sigma):
         """(Differentiably!) draw sample from Gaussian with given shape,
@@ -163,14 +154,13 @@ class VAE:
             return mu + epsilon * tf.exp(log_sigma) # N(mu, I * sigma**2)
 
     @staticmethod
-    def crossEntropy(obs, actual, offset=1e-7):
+    def crossEntropy(obs, actual):
         """Binary cross-entropy, per training example"""
         # (tf.Tensor, tf.Tensor, float) -> tf.Tensor
         with tf.name_scope("cross_entropy"):
-            # bound by clipping to avoid nan
-            obs_ = tf.clip_by_value(obs, offset, 1 - offset)
-            return -tf.reduce_sum(actual * tf.log(obs_) +
-                                  (1 - actual) * tf.log(1 - obs_), 1)
+            # assumes sigmoid has not been applied yet (more numerically stable)
+            cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(obs, actual)
+            return tf.reduce_sum(cross_entropy, 1)
 
     @staticmethod
     def l1_loss(obs, actual):
@@ -214,9 +204,9 @@ class VAE:
         if zs is not None:
             # coerce to np.array, if zs is tensor
             zs = self.sesh.run(zs) if hasattr(zs, "eval") else zs
-            feed_dict.update({self.z_: zs})
+            feed_dict.update({self.z_in: zs})
         # else, zs defaults to draw from conjugate prior z ~ N(0, I)
-        return self.sesh.run(self.x_reconstructed_, feed_dict=feed_dict)
+        return self.sesh.run(self.x_generated, feed_dict=feed_dict)
 
     def vae(self, x):
         """End-to-end autoencoder"""
