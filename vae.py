@@ -130,16 +130,8 @@ class VAE:
 
         # optimization
         global_step = tf.Variable(0, trainable=False)
-        with tf.name_scope("Adam_optimizer"):
-            optimizer = tf.train.AdamOptimizer(self.learning_rate)
-            tvars = tf.trainable_variables()
-            grads_and_vars = optimizer.compute_gradients(cost, tvars)
-            # gradient clipping
-            clipped = [ (tf.clip_by_value(grad, -5, 5), tvar)
-                        for grad, tvar in grads_and_vars ]
-            train_op = optimizer.apply_gradients(clipped,
-                                                 global_step=global_step,
-                                                 name="minimize_cost")
+        train_op = tf.contrib.layers.optimize_loss(cost, global_step,
+            self.learning_rate, 'Adam', clip_gradients=5., name="trainer")
 
         return (x_in, dropout, z_mean, z_log_sigma, x_out, z,
                 cost, global_step, train_op)
