@@ -131,7 +131,8 @@ class VAE:
         # optimization
         global_step = tf.Variable(0, trainable=False)
         train_op = tf.contrib.layers.optimize_loss(cost, global_step,
-            self.learning_rate, 'Adam', clip_gradients=5., name="trainer")
+            self.learning_rate, 'Adam', clip_gradients=self.grad_clipping,
+            name="trainer")
 
         return (x_in, dropout, z_mean, z_log_sigma, x_out, z,
                 cost, global_step, train_op)

@@ -26,7 +26,8 @@ def train(args):
         "learning_rate": args.learning_rate,
         "dropout": args.dropout_prob,
         "lambda_l2_reg": args.lambda_,
-        "nonlinearity": tf.nn.elu
+        "nonlinearity": tf.nn.elu,
+        "grad_clipping": args.clip
     }
 
     data = Data(args.data_file)
@@ -69,6 +70,10 @@ if __name__ == "__main__":
                               help='Learning rate for optimizer.')
     train_parser.add_argument('-p', '--dropout_prob', type=float, default=0.9,
                               help='Keep probability for dropout in training.')
+    train_parser.add_argument('-c', '--clip', type=float, nargs='?', default=5,
+                              help='Clip gradients by magnitude for training. '\
+                              'Empty argument means no clipping. '\
+                              'Defaults to 5.', metavar="VALUE")
     train_parser.add_argument('--lambda', type=float, default=1e-5,
                               dest='lambda_', metavar='LAMBDA',
                               help='Lambda in L2 regularization.')
